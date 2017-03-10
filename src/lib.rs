@@ -52,3 +52,47 @@ impl fmt::Display for ConsumeError {
         write!(formatter, "{}", error::Error::description(self))
     }
 }
+
+// ProduceError __________________________________
+
+/// Indicates the reason a `produce` operation rejected an item.
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum ProduceError<T> {
+    /// The queue had no remaining consumers.
+    Disconnected(T),
+    /// The queue was full.
+    Full(T),
+}
+
+impl<T> ProduceError<T> {
+    //- Consumers --------------------------------
+
+    /// Returns the rejected item.
+    pub fn item(self) -> T {
+        match self { ProduceError::Disconnected(item) | ProduceError::Full(item) => item }
+    }
+}
+
+impl<T> error::Error for ProduceError<T> {
+    fn description(&self) -> &str {
+        match *self {
+            ProduceError::Disconnected(_) => "the queue had no remaining consumers",
+            ProduceError::Full(_) => "the queue was full",
+        }
+    }
+}
+
+impl<T> fmt::Debug for ProduceError<T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ProduceError::Disconnected(_) => write!(formatter, "ProduceError::Disconnected(..)"),
+            ProduceError::Full(_) => write!(formatter, "ProduceError::Full(..)"),
+        }
+    }
+}
+
+impl<T> fmt::Display for ProduceError<T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "{}", error::Error::description(self))
+    }
+}
