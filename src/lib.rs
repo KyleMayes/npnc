@@ -19,3 +19,36 @@
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 #![cfg_attr(feature="clippy", warn(clippy))]
+
+use std::error;
+use std::fmt;
+
+//================================================
+// Enums
+//================================================
+
+// ConsumeError __________________________________
+
+/// Indicates the reason a `consume` operation could not return an item.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ConsumeError {
+    /// The queue was empty and had no remaining producers.
+    Disconnected,
+    /// The queue was empty.
+    Empty,
+}
+
+impl error::Error for ConsumeError {
+    fn description(&self) -> &str {
+        match *self {
+            ConsumeError::Disconnected => "the queue was empty and had no remaining producers",
+            ConsumeError::Empty => "the queue was empty",
+        }
+    }
+}
+
+impl fmt::Display for ConsumeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "{}", error::Error::description(self))
+    }
+}
