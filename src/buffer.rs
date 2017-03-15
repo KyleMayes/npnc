@@ -59,6 +59,16 @@ impl<T> Buffer<T> {
         self.get(index & (self.size - 1))
     }
 
+    /// Returns a reference to the item at the supplied index in this buffer.
+    pub unsafe fn get_ref(&self, index: usize) -> &T {
+        &*self.data.offset(index as isize)
+    }
+
+    /// Returns a reference to the item at the supplied index in this buffer after wrapping the index.
+    pub unsafe fn wrapping_get_ref(&self, index: usize) -> &T {
+        self.get_ref(index & (self.size - 1))
+    }
+
     /// Sets the item at the supplied index in this buffer.
     pub unsafe fn set(&self, index: usize, item: T) {
         ptr::write(self.data.offset(index as isize), item);

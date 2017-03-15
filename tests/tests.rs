@@ -40,6 +40,13 @@ macro_rules! test {
     });
 }
 
+macro_rules! test_mpmc {
+    ([$($path:tt)*]$(, $size:expr)*) => ({
+        let (producer, consumer) = npnc::$($path)*::channel($($size)*);
+        test!([$($path)*], vec![producer.clone(), producer], vec![consumer.clone(), consumer]);
+    });
+}
+
 macro_rules! test_spsc {
     ([$($path:tt)*]$(, $size:expr)*) => ({
         let (producer, consumer) = npnc::$($path)*::channel($($size)*);
@@ -60,4 +67,5 @@ fn main() {
     let filter = env::args().nth(1);
     run!(filter, "bounded_spsc", test_spsc!([bounded::spsc], 2 << 24));
     run!(filter, "unbounded_spsc", test_spsc!([unbounded::spsc]));
+    run!(filter, "bounded_mpmc", test_mpmc!([bounded::mpmc], 2 << 24));
 }
