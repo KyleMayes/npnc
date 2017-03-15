@@ -64,4 +64,5 @@ macro_rules! run {
 fn main() {
     let filter = env::args().nth(1).and_then(|f| if f == "--bench" { None } else { Some(f) });
     run!(filter, "bounded_spsc", 25, bench_spsc!([bounded::spsc], 2 << 24));
+    run!(filter, "unbounded_spsc", 5, bench_spsc!([unbounded::spsc]));
 }

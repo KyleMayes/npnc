@@ -59,4 +59,5 @@ macro_rules! run {
 fn main() {
     let filter = env::args().nth(1);
     run!(filter, "bounded_spsc", test_spsc!([bounded::spsc], 2 << 24));
+    run!(filter, "unbounded_spsc", test_spsc!([unbounded::spsc]));
 }

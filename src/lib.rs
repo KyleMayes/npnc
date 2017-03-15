@@ -25,11 +25,16 @@
 #[cfg(feature="valgrind")]
 extern crate alloc_system;
 
+extern crate hazard;
+
 use std::error;
 use std::fmt;
 
+#[macro_use]
+mod utility;
 mod buffer;
 pub mod bounded;
+pub mod unbounded;
 
 /// The number of pointers that fit in a 128 byte cacheline.
 #[cfg(target_pointer_width="32")]
