@@ -14,16 +14,28 @@
 
 //! Lock-free queues.
 
+#![cfg_attr(feature="valgrind", feature(alloc_system))]
+
 #![warn(missing_copy_implementations, missing_debug_implementations, missing_docs)]
 
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 #![cfg_attr(feature="clippy", warn(clippy))]
 
+#[cfg(feature="valgrind")]
+extern crate alloc_system;
+
 use std::error;
 use std::fmt;
 
 mod buffer;
+pub mod bounded;
+
+/// The number of pointers that fit in a 128 byte cacheline.
+#[cfg(target_pointer_width="32")]
+const POINTERS: usize = 32;
+#[cfg(target_pointer_width="64")]
+const POINTERS: usize = 16;
 
 //================================================
 // Enums
