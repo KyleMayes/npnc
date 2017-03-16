@@ -14,4 +14,5 @@
 
 //! Unbounded lock-free queues.
 
+pub mod mpmc;
 pub mod spsc;

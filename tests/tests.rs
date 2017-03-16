@@ -68,4 +68,5 @@ fn main() {
     run!(filter, "bounded_spsc", test_spsc!([bounded::spsc], 2 << 24));
     run!(filter, "unbounded_spsc", test_spsc!([unbounded::spsc]));
     run!(filter, "bounded_mpmc", test_mpmc!([bounded::mpmc], 2 << 24));
+    run!(filter, "unbounded_mpmc", test_mpmc!([unbounded::mpmc], 2));
 }
