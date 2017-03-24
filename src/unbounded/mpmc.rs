@@ -126,8 +126,8 @@ impl<T> Node<T> {
 
 // Queue _________________________________________
 
-const READ: usize = 1;
-const WRITE: usize = 0;
+const READ: usize = 0;
+const WRITE: usize = 1;
 const NEXT: usize = 2;
 
 #[derive(Debug)]
