@@ -156,7 +156,7 @@ impl<T> Queue<T> {
             read: AtomicPtr::new(sentinel),
             producer: AtomicUsize::new(1),
             _rpadding: [0; POINTERS - 2],
-            hazard: Hazard::new(VecMemory, threads, 3),
+            hazard: Hazard::new(VecMemory, threads, 3, 512),
             threads: Mutex::new((2..threads).collect()),
         })
     }
@@ -171,9 +171,9 @@ impl<T> Queue<T> {
 
         let node = unsafe { VecMemory.allocate(Node::new(Some(item))) };
         loop {
-            let write = self.hazard.mark(thread, WRITE, self.write.load(SeqCst));
-            if write == self.write.load(SeqCst) {
-                let next = deref!(write).next.load(SeqCst);
+            let write = self.hazard.mark(thread, WRITE, self.write.load(Acquire));
+            if write == self.write.load(Acquire) {
+                let next = deref!(write).next.load(Acquire);
                 if next.is_null() {
                     // Add the item to the back of the queue if this node is available.
                     if exchange(&deref!(write).next, ptr::null_mut(), node) {
@@ -192,8 +192,8 @@ impl<T> Queue<T> {
     fn consume(&self, thread: usize) -> Result<T, ConsumeError> {
         loop {
             // Return an error if the queue is empty.
-            let read = self.hazard.mark(thread, READ, self.read.load(SeqCst));
-            if read == self.write.load(SeqCst) {
+            let read = self.hazard.mark(thread, READ, self.read.load(Acquire));
+            if read == self.write.load(Acquire) {
                 if self.producer.load(Acquire) == 0 {
                     return Err(ConsumeError::Disconnected);
                 } else {
@@ -202,7 +202,7 @@ impl<T> Queue<T> {
             }
 
             // Remove and return the item at the front of the queue if this node is available.
-            let next = self.hazard.mark(thread, NEXT, deref!(read).next.load(SeqCst));
+            let next = self.hazard.mark(thread, NEXT, deref!(read).next.load(Acquire));
             if exchange(&self.read, read, next) {
                 let item = deref_mut!(next).item.take().unwrap();
                 self.hazard.clear(thread, READ);
@@ -228,7 +228,7 @@ unsafe impl<T> Sync for Queue<T> where T: Send { }
 //================================================
 
 fn exchange<T>(atomic: &AtomicPtr<Node<T>>, current: *mut Node<T>, new: *mut Node<T>) -> bool {
-    atomic.compare_exchange(current, new, SeqCst, SeqCst).is_ok()
+    atomic.compare_exchange(current, new, AcqRel, Acquire).is_ok()
 }
 
 /// Returns a producer and consumer for an unbounded MPMC lock-free queue.
