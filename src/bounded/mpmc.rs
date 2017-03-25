@@ -18,7 +18,8 @@ use std::mem;
 use std::ptr;
 use std::cell::{UnsafeCell};
 use std::sync::{Arc};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize};
+use std::sync::atomic::Ordering::*;
 
 use {ConsumeError, ProduceError, POINTERS};
 use buffer::{Buffer};
@@ -46,14 +47,14 @@ impl<T> Consumer<T> {
 
 impl<T> Clone for Consumer<T> {
     fn clone(&self) -> Self {
-        self.0.consumer.fetch_add(1, Ordering::Release);
+        self.0.consumer.fetch_add(1, Release);
         Consumer(self.0.clone())
     }
 }
 
 impl<T> Drop for Consumer<T> {
     fn drop(&mut self) {
-        self.0.consumer.fetch_sub(1, Ordering::Release);
+        self.0.consumer.fetch_sub(1, Release);
     }
 }
 
@@ -78,14 +79,14 @@ impl<T> Producer<T> {
 
 impl<T> Clone for Producer<T> {
     fn clone(&self) -> Self {
-        self.0.producer.fetch_add(1, Ordering::Release);
+        self.0.producer.fetch_add(1, Release);
         Producer(self.0.clone())
     }
 }
 
 impl<T> Drop for Producer<T> {
     fn drop(&mut self) {
-        self.0.producer.fetch_sub(1, Ordering::Release);
+        self.0.producer.fetch_sub(1, Release);
     }
 }
 
@@ -157,14 +158,14 @@ impl<T> Queue<T> {
 
     fn produce(&self, item: T) -> Result<(), ProduceError<T>> {
         // Return an error if all of the consumers have been disconnected.
-        if self.consumer.load(Ordering::Acquire) == 0 {
+        if self.consumer.load(Acquire) == 0 {
             return Err(ProduceError::Disconnected(item));
         }
 
         loop {
-            let write = self.write.load(Ordering::Relaxed);
+            let write = self.write.load(Relaxed);
             let slot = unsafe { self.buffer.wrapping_get_ref(write) };
-            let sequence = slot.sequence.load(Ordering::Acquire);
+            let sequence = slot.sequence.load(Acquire);
             let difference = (sequence as isize).wrapping_sub(write as isize);
 
             // Return an error if the queue is full.
@@ -176,7 +177,7 @@ impl<T> Queue<T> {
             let next = write.wrapping_add(1);
             if difference == 0 && exchange(&self.write, write, next) {
                 unsafe { slot.set(item); }
-                slot.sequence.store(next, Ordering::Release);
+                slot.sequence.store(next, Release);
                 return Ok(());
             }
         }
@@ -184,14 +185,14 @@ impl<T> Queue<T> {
 
     fn consume(&self) -> Result<T, ConsumeError> {
         loop {
-            let read = self.read.load(Ordering::Relaxed);
+            let read = self.read.load(Relaxed);
             let slot = unsafe { self.buffer.wrapping_get_ref(read) };
-            let sequence = slot.sequence.load(Ordering::Acquire);
+            let sequence = slot.sequence.load(Acquire);
             let difference = (sequence as isize).wrapping_sub(read.wrapping_add(1) as isize);
 
             // Return an error if the queue is empty.
             if difference < 0 {
-                if self.producer.load(Ordering::Acquire) == 0 {
+                if self.producer.load(Acquire) == 0 {
                     return Err(ConsumeError::Disconnected);
                 } else {
                     return Err(ConsumeError::Empty);
@@ -202,7 +203,7 @@ impl<T> Queue<T> {
             let next = read.wrapping_add(1);
             if difference == 0 && exchange(&self.read, read, next) {
                 let item = unsafe { slot.get() };
-                slot.sequence.store(next.wrapping_add(self.buffer.size() - 1), Ordering::Release);
+                slot.sequence.store(next.wrapping_add(self.buffer.size() - 1), Release);
                 return Ok(item);
             }
         }
@@ -222,7 +223,7 @@ unsafe impl<T> Sync for Queue<T> where T: Send { }
 //================================================
 
 fn exchange(atomic: &AtomicUsize, current: usize, new: usize) -> bool {
-    atomic.compare_exchange_weak(current, new, Ordering::Relaxed, Ordering::Relaxed).is_ok()
+    atomic.compare_exchange_weak(current, new, Relaxed, Relaxed).is_ok()
 }
 
 /// Returns a producer and consumer for a bounded MPMC lock-free queue.

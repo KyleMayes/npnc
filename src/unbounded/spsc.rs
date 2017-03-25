@@ -17,7 +17,8 @@
 use std::ptr;
 use std::cell::{Cell};
 use std::sync::{Arc};
-use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicPtr, AtomicUsize};
+use std::sync::atomic::Ordering::*;
 
 use hazard::{Memory, VecMemory};
 
@@ -46,7 +47,7 @@ impl<T> Consumer<T> {
 
 impl<T> Drop for Consumer<T> {
     fn drop(&mut self) {
-        self.0.consumer.store(0, Ordering::Release);
+        self.0.consumer.store(0, Release);
     }
 }
 
@@ -71,7 +72,7 @@ impl<T> Producer<T> {
 
 impl<T> Drop for Producer<T> {
     fn drop(&mut self) {
-        self.0.producer.store(0, Ordering::Release);
+        self.0.producer.store(0, Release);
     }
 }
 
@@ -125,22 +126,22 @@ impl<T> Queue<T> {
 
     fn produce(&self, item: T) -> Result<(), ProduceError<T>> {
         // Return an error if the consumer has been disconnected.
-        if self.consumer.load(Ordering::Acquire) == 0 {
+        if self.consumer.load(Acquire) == 0 {
             return Err(ProduceError::Disconnected(item));
         }
 
         // Add the item to the back of the queue.
         let node = unsafe { VecMemory.allocate(Node::new(Some(item))) };
-        deref!(self.write.get()).next.store(node, Ordering::Release);
+        deref!(self.write.get()).next.store(node, Release);
         self.write.set(node);
         Ok(())
     }
 
     fn consume(&self) -> Result<T, ConsumeError> {
         // Return an error if the queue is empty.
-        let next = deref!(self.read.get()).next.load(Ordering::Acquire);
+        let next = deref!(self.read.get()).next.load(Acquire);
         if next.is_null() {
-            if self.producer.load(Ordering::Acquire) == 0 {
+            if self.producer.load(Acquire) == 0 {
                 return Err(ConsumeError::Disconnected);
             } else {
                 return Err(ConsumeError::Empty);

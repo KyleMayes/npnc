@@ -16,10 +16,12 @@
 
 use std::cell::{Cell};
 use std::sync::{Arc};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize};
+use std::sync::atomic::Ordering::*;
 
 use {ConsumeError, ProduceError, POINTERS};
 use buffer::{Buffer};
+
 
 //================================================
 // Structs
@@ -44,7 +46,7 @@ impl<T> Consumer<T> {
 
 impl<T> Drop for Consumer<T> {
     fn drop(&mut self) {
-        self.0.consumer.store(0, Ordering::Release);
+        self.0.consumer.store(0, Release);
     }
 }
 
@@ -69,7 +71,7 @@ impl<T> Producer<T> {
 
 impl<T> Drop for Producer<T> {
     fn drop(&mut self) {
-        self.0.producer.store(0, Ordering::Release);
+        self.0.producer.store(0, Release);
     }
 }
 
@@ -112,14 +114,14 @@ impl<T> Queue<T> {
 
     fn produce(&self, item: T) -> Result<(), ProduceError<T>> {
         // Return an error if the consumer has been disconnected.
-        if self.consumer.load(Ordering::Acquire) == 0 {
+        if self.consumer.load(Acquire) == 0 {
             return Err(ProduceError::Disconnected(item));
         }
 
         // Return an error if the queue is full.
-        let write = self.write.load(Ordering::Acquire);
+        let write = self.write.load(Acquire);
         if write.wrapping_sub(self.read_copy.get()) == self.buffer.size() {
-            self.read_copy.set(self.read.load(Ordering::Acquire));
+            self.read_copy.set(self.read.load(Acquire));
             if write.wrapping_sub(self.read_copy.get()) == self.buffer.size() {
                 return Err(ProduceError::Full(item));
             }
@@ -127,17 +129,17 @@ impl<T> Queue<T> {
 
         // Add the item to the back of the queue.
         unsafe { self.buffer.wrapping_set(write, item); }
-        self.write.store(write.wrapping_add(1), Ordering::Release);
+        self.write.store(write.wrapping_add(1), Release);
         Ok(())
     }
 
     fn consume(&self) -> Result<T, ConsumeError> {
         // Return an error if the queue is empty.
-        let read = self.read.load(Ordering::Acquire);
+        let read = self.read.load(Acquire);
         if read == self.write_copy.get() {
-            self.write_copy.set(self.write.load(Ordering::Acquire));
+            self.write_copy.set(self.write.load(Acquire));
             if read == self.write_copy.get() {
-                if self.producer.load(Ordering::Acquire) == 0 {
+                if self.producer.load(Acquire) == 0 {
                     return Err(ConsumeError::Disconnected);
                 } else {
                     return Err(ConsumeError::Empty);
@@ -147,7 +149,7 @@ impl<T> Queue<T> {
 
         // Remove and return the item at the front of the queue.
         let item = unsafe { self.buffer.wrapping_get(read) };
-        self.read.store(read.wrapping_add(1), Ordering::Release);
+        self.read.store(read.wrapping_add(1), Release);
         Ok(item)
     }
 }

@@ -16,7 +16,8 @@
 
 use std::ptr;
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicPtr, AtomicUsize};
+use std::sync::atomic::Ordering::*;
 
 use hazard::{Hazard, Memory, VecMemory};
 
@@ -60,7 +61,7 @@ impl<T> Clone for Consumer<T> {
 
 impl<T> Drop for Consumer<T> {
     fn drop(&mut self) {
-        self.1.consumer.store(0, Ordering::Release);
+        self.1.consumer.store(0, Release);
         self.1.threads.lock().unwrap().push(self.0);
     }
 }
@@ -101,7 +102,7 @@ impl<T> Clone for Producer<T> {
 
 impl<T> Drop for Producer<T> {
     fn drop(&mut self) {
-        self.1.producer.store(0, Ordering::Release);
+        self.1.producer.store(0, Release);
         self.1.threads.lock().unwrap().push(self.0);
     }
 }
@@ -164,15 +165,15 @@ impl<T> Queue<T> {
 
     fn produce(&self, thread: usize, item: T) -> Result<(), ProduceError<T>> {
         // Return an error if all of the consumers have been disconnected.
-        if self.consumer.load(Ordering::Acquire) == 0 {
+        if self.consumer.load(Acquire) == 0 {
             return Err(ProduceError::Disconnected(item));
         }
 
         let node = unsafe { VecMemory.allocate(Node::new(Some(item))) };
         loop {
-            let write = self.hazard.mark(thread, WRITE, self.write.load(Ordering::SeqCst));
-            if write == self.write.load(Ordering::SeqCst) {
-                let next = deref!(write).next.load(Ordering::SeqCst);
+            let write = self.hazard.mark(thread, WRITE, self.write.load(SeqCst));
+            if write == self.write.load(SeqCst) {
+                let next = deref!(write).next.load(SeqCst);
                 if next.is_null() {
                     // Add the item to the back of the queue if this node is available.
                     if exchange(&deref!(write).next, ptr::null_mut(), node) {
@@ -191,9 +192,9 @@ impl<T> Queue<T> {
     fn consume(&self, thread: usize) -> Result<T, ConsumeError> {
         loop {
             // Return an error if the queue is empty.
-            let read = self.hazard.mark(thread, READ, self.read.load(Ordering::SeqCst));
-            if read == self.write.load(Ordering::SeqCst) {
-                if self.producer.load(Ordering::Acquire) == 0 {
+            let read = self.hazard.mark(thread, READ, self.read.load(SeqCst));
+            if read == self.write.load(SeqCst) {
+                if self.producer.load(Acquire) == 0 {
                     return Err(ConsumeError::Disconnected);
                 } else {
                     return Err(ConsumeError::Empty);
@@ -201,7 +202,7 @@ impl<T> Queue<T> {
             }
 
             // Remove and return the item at the front of the queue if this node is available.
-            let next = self.hazard.mark(thread, NEXT, deref!(read).next.load(Ordering::SeqCst));
+            let next = self.hazard.mark(thread, NEXT, deref!(read).next.load(SeqCst));
             if exchange(&self.read, read, next) {
                 let item = deref_mut!(next).item.take().unwrap();
                 self.hazard.clear(thread, READ);
@@ -216,7 +217,7 @@ impl<T> Queue<T> {
 impl<T> Drop for Queue<T> {
     fn drop(&mut self) {
         while self.consume(0).is_ok() { }
-        unsafe { VecMemory.deallocate(self.write.load(Ordering::Relaxed)); }
+        unsafe { VecMemory.deallocate(self.write.load(Relaxed)); }
     }
 }
 
@@ -227,7 +228,7 @@ unsafe impl<T> Sync for Queue<T> where T: Send { }
 //================================================
 
 fn exchange<T>(atomic: &AtomicPtr<Node<T>>, current: *mut Node<T>, new: *mut Node<T>) -> bool {
-    atomic.compare_exchange(current, new, Ordering::SeqCst, Ordering::SeqCst).is_ok()
+    atomic.compare_exchange(current, new, SeqCst, SeqCst).is_ok()
 }
 
 /// Returns a producer and consumer for an unbounded MPMC lock-free queue.
