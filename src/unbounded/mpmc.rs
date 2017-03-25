@@ -46,6 +46,7 @@ impl<T> Consumer<T> {
     /// Attempts to clone this consumer.
     pub fn try_clone(&self) -> Option<Self> {
         if let Some(thread) = self.1.threads.lock().unwrap().pop() {
+            self.1.consumers.fetch_add(1, Release);
             Some(Consumer(thread, self.1.clone()))
         } else {
             None
@@ -61,8 +62,8 @@ impl<T> Clone for Consumer<T> {
 
 impl<T> Drop for Consumer<T> {
     fn drop(&mut self) {
-        self.1.consumer.store(0, Release);
         self.1.threads.lock().unwrap().push(self.0);
+        self.1.consumers.fetch_sub(1, Release);
     }
 }
 
@@ -87,6 +88,7 @@ impl<T> Producer<T> {
     /// Attempts to clone this producer.
     pub fn try_clone(&self) -> Option<Self> {
         if let Some(thread) = self.1.threads.lock().unwrap().pop() {
+            self.1.producers.fetch_add(1, Release);
             Some(Producer(thread, self.1.clone()))
         } else {
             None
@@ -102,8 +104,8 @@ impl<T> Clone for Producer<T> {
 
 impl<T> Drop for Producer<T> {
     fn drop(&mut self) {
-        self.1.producer.store(0, Release);
         self.1.threads.lock().unwrap().push(self.0);
+        self.1.producers.fetch_sub(1, Release);
     }
 }
 
@@ -135,10 +137,10 @@ const NEXT: usize = 2;
 #[repr(C)]
 struct Queue<T> {
     write: AtomicPtr<Node<T>>,
-    consumer: AtomicUsize,
+    consumers: AtomicUsize,
     _wpadding: [usize; POINTERS - 2],
     read: AtomicPtr<Node<T>>,
-    producer: AtomicUsize,
+    producers: AtomicUsize,
     _rpadding: [usize; POINTERS - 2],
     hazard: Hazard<Node<T>, VecMemory>,
     threads: Mutex<Vec<usize>>,
@@ -151,10 +153,10 @@ impl<T> Queue<T> {
         let sentinel = unsafe { VecMemory.allocate(Node::new(None)) };
         Arc::new(Queue {
             write: AtomicPtr::new(sentinel),
-            consumer: AtomicUsize::new(1),
+            consumers: AtomicUsize::new(1),
             _wpadding: [0; POINTERS - 2],
             read: AtomicPtr::new(sentinel),
-            producer: AtomicUsize::new(1),
+            producers: AtomicUsize::new(1),
             _rpadding: [0; POINTERS - 2],
             hazard: Hazard::new(VecMemory, threads, 3, 512),
             threads: Mutex::new((2..threads).collect()),
@@ -165,7 +167,7 @@ impl<T> Queue<T> {
 
     fn produce(&self, thread: usize, item: T) -> Result<(), ProduceError<T>> {
         // Return an error if all of the consumers have been disconnected.
-        if self.consumer.load(Acquire) == 0 {
+        if self.consumers.load(Acquire) == 0 {
             return Err(ProduceError::Disconnected(item));
         }
 
@@ -194,7 +196,7 @@ impl<T> Queue<T> {
             // Return an error if the queue is empty.
             let read = self.hazard.mark(thread, READ, self.read.load(Acquire));
             if read == self.write.load(Acquire) {
-                if self.producer.load(Acquire) == 0 {
+                if self.producers.load(Acquire) == 0 {
                     return Err(ConsumeError::Disconnected);
                 } else {
                     return Err(ConsumeError::Empty);
