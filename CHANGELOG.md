@@ -3,6 +3,9 @@
 ### Added
 - Added `len`, `is_empty`, and `capacity` methods to bounded queues
 
+### Changed
+- Bumped `hazard` version to `0.3.0`
+
 ## [0.1.1] - 2017-03-24
 
 ### Fixed

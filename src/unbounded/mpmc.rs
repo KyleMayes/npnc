@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::atomic::Ordering::*;
 
-use hazard::{Hazard, Memory, VecMemory};
+use hazard::{BoxMemory, Memory, Pointers};
 
 use {ConsumeError, ProduceError, POINTERS};
 
@@ -137,12 +137,12 @@ const NEXT: usize = 2;
 #[repr(C)]
 struct Queue<T> {
     write: AtomicPtr<Node<T>>,
-    consumers: AtomicUsize,
+    producers: AtomicUsize,
     _wpadding: [usize; POINTERS - 2],
     read: AtomicPtr<Node<T>>,
-    producers: AtomicUsize,
+    consumers: AtomicUsize,
     _rpadding: [usize; POINTERS - 2],
-    hazard: Hazard<Node<T>, VecMemory>,
+    pointers: Pointers<Node<T>, BoxMemory>,
     threads: Mutex<Vec<usize>>,
 }
 
@@ -150,15 +150,15 @@ impl<T> Queue<T> {
     //- Constructors -----------------------------
 
     fn new(threads: usize) -> Arc<Self> {
-        let sentinel = unsafe { VecMemory.allocate(Node::new(None)) };
+        let sentinel = BoxMemory.allocate(Node::new(None));
         Arc::new(Queue {
             write: AtomicPtr::new(sentinel),
-            consumers: AtomicUsize::new(1),
+            producers: AtomicUsize::new(1),
             _wpadding: [0; POINTERS - 2],
             read: AtomicPtr::new(sentinel),
-            producers: AtomicUsize::new(1),
+            consumers: AtomicUsize::new(1),
             _rpadding: [0; POINTERS - 2],
-            hazard: Hazard::new(VecMemory, threads, 3, 512),
+            pointers: Pointers::new(BoxMemory, threads, 3, 512),
             threads: Mutex::new((2..threads).collect()),
         })
     }
@@ -171,16 +171,16 @@ impl<T> Queue<T> {
             return Err(ProduceError::Disconnected(item));
         }
 
-        let node = unsafe { VecMemory.allocate(Node::new(Some(item))) };
+        let node = BoxMemory.allocate(Node::new(Some(item)));
         loop {
-            let write = self.hazard.mark(thread, WRITE, self.write.load(Acquire));
+            let write = self.pointers.mark_ptr(thread, WRITE, self.write.load(Acquire));
             if write == self.write.load(Acquire) {
                 let next = deref!(write).next.load(Acquire);
                 if next.is_null() {
                     // Add the item to the back of the queue if this node is available.
                     if exchange(&deref!(write).next, ptr::null_mut(), node) {
                         exchange(&self.write, write, node);
-                        self.hazard.clear(thread, WRITE);
+                        self.pointers.clear(thread, WRITE);
                         return Ok(());
                     }
                 } else {
@@ -194,7 +194,7 @@ impl<T> Queue<T> {
     fn consume(&self, thread: usize) -> Result<T, ConsumeError> {
         loop {
             // Return an error if the queue is empty.
-            let read = self.hazard.mark(thread, READ, self.read.load(Acquire));
+            let read = self.pointers.mark(thread, READ, &self.read);
             if read == self.write.load(Acquire) {
                 if self.producers.load(Acquire) == 0 {
                     return Err(ConsumeError::Disconnected);
@@ -204,12 +204,12 @@ impl<T> Queue<T> {
             }
 
             // Remove and return the item at the front of the queue if this node is available.
-            let next = self.hazard.mark(thread, NEXT, deref!(read).next.load(Acquire));
+            let next = self.pointers.mark(thread, NEXT, &deref!(read).next);
             if exchange(&self.read, read, next) {
                 let item = deref_mut!(next).item.take().unwrap();
-                self.hazard.clear(thread, READ);
-                self.hazard.clear(thread, NEXT);
-                self.hazard.retire(thread, read);
+                self.pointers.clear(thread, READ);
+                self.pointers.clear(thread, NEXT);
+                self.pointers.retire(thread, read);
                 return Ok(item);
             }
         }
@@ -219,7 +219,7 @@ impl<T> Queue<T> {
 impl<T> Drop for Queue<T> {
     fn drop(&mut self) {
         while self.consume(0).is_ok() { }
-        unsafe { VecMemory.deallocate(self.write.load(Relaxed)); }
+        unsafe { BoxMemory.deallocate(self.write.load(Relaxed)); }
     }
 }
 

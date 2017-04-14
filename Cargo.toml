@@ -19,7 +19,7 @@ valgrind = []
 
 [dependencies]
 
-hazard = "0.2.0"
+hazard = "0.3.0"
 
 clippy = { version = "0.0.*", optional = true }
 

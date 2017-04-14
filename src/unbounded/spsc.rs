@@ -20,7 +20,7 @@ use std::sync::{Arc};
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
 use std::sync::atomic::Ordering::*;
 
-use hazard::{Memory, VecMemory};
+use hazard::{BoxMemory, Memory};
 
 use {ConsumeError, ProduceError, POINTERS};
 
@@ -111,7 +111,7 @@ impl<T> Queue<T> {
     //- Constructors -----------------------------
 
     fn new() -> Arc<Self> {
-        let sentinel = unsafe { VecMemory.allocate(Node::new(None)) };
+        let sentinel = BoxMemory.allocate(Node::new(None));
         Arc::new(Queue {
             write: Cell::new(sentinel),
             consumer: AtomicUsize::new(1),
@@ -131,7 +131,7 @@ impl<T> Queue<T> {
         }
 
         // Add the item to the back of the queue.
-        let node = unsafe { VecMemory.allocate(Node::new(Some(item))) };
+        let node = BoxMemory.allocate(Node::new(Some(item)));
         deref!(self.write.get()).next.store(node, Release);
         self.write.set(node);
         Ok(())
@@ -150,7 +150,7 @@ impl<T> Queue<T> {
 
         // Remove and return the item at the front of the queue.
         let item = deref_mut!(next).item.take().unwrap();
-        unsafe { VecMemory.deallocate(self.read.get()); }
+        unsafe { BoxMemory.deallocate(self.read.get()); }
         self.read.set(next);
         Ok(item)
     }
@@ -159,7 +159,7 @@ impl<T> Queue<T> {
 impl<T> Drop for Queue<T> {
     fn drop(&mut self) {
         while self.consume().is_ok() { }
-        unsafe { VecMemory.deallocate(self.write.get()); }
+        unsafe { BoxMemory.deallocate(self.write.get()); }
     }
 }
 
