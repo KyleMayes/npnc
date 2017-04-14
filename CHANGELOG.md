@@ -1,4 +1,4 @@
-## [0.2.0] - UNRELEASED
+## [0.2.0] - 2017-04-14
 
 ### Added
 - Added `len`, `is_empty`, and `capacity` methods to bounded queues
