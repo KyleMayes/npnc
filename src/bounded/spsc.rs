@@ -22,7 +22,6 @@ use std::sync::atomic::Ordering::*;
 use {ConsumeError, ProduceError, POINTERS};
 use buffer::{Buffer};
 
-
 //================================================
 // Structs
 //================================================
@@ -41,6 +40,21 @@ impl<T> Consumer<T> {
     /// This method returns `Err` if the queue is empty.
     pub fn consume(&self) -> Result<T, ConsumeError> {
         self.0.consume()
+    }
+
+    /// Returns the number of items currently in the queue.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns whether the queue is currently empty.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns the maximum number of items the queue can contain.
+    pub fn capacity(&self) -> usize {
+        self.0.capacity()
     }
 }
 
@@ -66,6 +80,21 @@ impl<T> Producer<T> {
     /// This method returns `Err` if the queue is full or has no remaining consumers.
     pub fn produce(&self, item: T) -> Result<(), ProduceError<T>> {
         self.0.produce(item)
+    }
+
+    /// Returns the number of items currently in the queue.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns whether the queue is currently empty.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns the maximum number of items the queue can contain.
+    pub fn capacity(&self) -> usize {
+        self.0.capacity()
     }
 }
 
@@ -111,6 +140,14 @@ impl<T> Queue<T> {
     }
 
     //- Accessors --------------------------------
+
+    fn len(&self) -> usize {
+        self.write.load(Acquire).wrapping_sub(self.read.load(Acquire))
+    }
+
+    fn capacity(&self) -> usize {
+        self.buffer.size()
+    }
 
     fn produce(&self, item: T) -> Result<(), ProduceError<T>> {
         // Return an error if the consumer has been disconnected.
