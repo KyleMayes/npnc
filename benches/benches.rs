@@ -18,6 +18,8 @@ extern crate npnc;
 
 use std::env;
 
+use queuecheck::{Data};
+
 const WARMUP: usize = 1_000_000;
 const MEASUREMENT: usize = 100_000_000;
 
@@ -29,6 +31,14 @@ fn thousands(ops: f64) -> String {
         string.insert(index, '_');
     }
     string
+}
+
+fn print_latencies(name: &str, data: &Data) {
+    println!("  {}", name);
+    for p in [50.0, 70.0, 90.0, 95.0, 99.0, 99.9, 99.99, 99.999, 99.9999, 99.99999].iter() {
+        let name = format!("{}%:", p);
+        println!("    {:<10} {}ns", name, thousands(data.percentile(*p)));
+    }
 }
 
 macro_rules! bench_throughput {
@@ -87,20 +97,8 @@ macro_rules! run_latency {
         if $filter.as_ref().map_or(true, |f| name.contains(f)) {
             println!("bench {} ...", name);
             let latency = $bench;
-            println!("  consume");
-            println!("    50.0%: {}ns", thousands(latency.consume.percentile(50.0)));
-            println!("    70.0%: {}ns", thousands(latency.consume.percentile(70.0)));
-            println!("    90.0%: {}ns", thousands(latency.consume.percentile(90.0)));
-            println!("    95.0%: {}ns", thousands(latency.consume.percentile(95.0)));
-            println!("    99.0%: {}ns", thousands(latency.consume.percentile(99.0)));
-            println!("    99.9%: {}ns", thousands(latency.consume.percentile(99.9)));
-            println!("  produce");
-            println!("    50.0%: {}ns", thousands(latency.produce.percentile(50.0)));
-            println!("    70.0%: {}ns", thousands(latency.produce.percentile(70.0)));
-            println!("    90.0%: {}ns", thousands(latency.produce.percentile(90.0)));
-            println!("    95.0%: {}ns", thousands(latency.produce.percentile(95.0)));
-            println!("    99.0%: {}ns", thousands(latency.produce.percentile(99.0)));
-            println!("    99.9%: {}ns", thousands(latency.produce.percentile(99.9)));
+            print_latencies("consume", &latency.consume);
+            print_latencies("produce", &latency.produce);
         }
     });
 }
