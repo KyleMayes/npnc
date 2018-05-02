@@ -31,7 +31,7 @@ fn thousands(ops: f64) -> String {
     string
 }
 
-macro_rules! bench {
+macro_rules! bench_throughput {
     ([$($path:tt)*], $producers:expr, $consumers:expr) => ({
         queuecheck_bench_throughput!(
             (WARMUP, MEASUREMENT),
@@ -43,17 +43,18 @@ macro_rules! bench {
     });
 }
 
-macro_rules! bench_spsc {
+macro_rules! bench_throughput_spsc {
     ([$($path:tt)*]$(, $size:expr)*) => ({
         let (producer, consumer) = npnc::$($path)*::channel($($size)*);
-        bench!([$($path)*], vec![producer], vec![consumer])
+        bench_throughput!([$($path)*], vec![producer], vec![consumer])
     });
 }
 
-macro_rules! run {
+macro_rules! run_throughput {
     ($filter:expr, $name:expr, $runs:expr, $bench:expr) => ({
-        if $filter.as_ref().map_or(true, |f| $name.contains(f)) {
-            println!("bench {} ...", $name);
+        let name = format!("throughput_{}", $name);
+        if $filter.as_ref().map_or(true, |f| name.contains(f)) {
+            println!("bench {} ...", name);
             let mut runs = (0..$runs).map(|_| $bench).collect::<Vec<_>>();
             runs.sort_by(|a, b| a.partial_cmp(b).unwrap());
             println!("  {} operation/second", thousands(runs[$runs / 2]));
@@ -61,10 +62,57 @@ macro_rules! run {
     });
 }
 
+macro_rules! bench_latency {
+    ([$($path:tt)*], $producers:expr, $consumers:expr) => ({
+        queuecheck_bench_latency!(
+            (WARMUP, MEASUREMENT),
+            $producers,
+            $consumers,
+            |p: &npnc::$($path)*::Producer<i32>, i: i32| p.produce(i).unwrap(),
+            |c: &npnc::$($path)*::Consumer<i32>| c.consume().ok()
+        )
+    });
+}
+
+macro_rules! bench_latency_spsc {
+    ([$($path:tt)*]$(, $size:expr)*) => ({
+        let (producer, consumer) = npnc::$($path)*::channel($($size)*);
+        bench_latency!([$($path)*], vec![producer], vec![consumer])
+    });
+}
+
+macro_rules! run_latency {
+    ($filter:expr, $name:expr, $bench:expr) => ({
+        let name = format!("latency_{}", $name);
+        if $filter.as_ref().map_or(true, |f| name.contains(f)) {
+            println!("bench {} ...", name);
+            let latency = $bench;
+            println!("  consume");
+            println!("    50.0%: {}ns", thousands(latency.consume.percentile(50.0)));
+            println!("    70.0%: {}ns", thousands(latency.consume.percentile(70.0)));
+            println!("    90.0%: {}ns", thousands(latency.consume.percentile(90.0)));
+            println!("    95.0%: {}ns", thousands(latency.consume.percentile(95.0)));
+            println!("    99.0%: {}ns", thousands(latency.consume.percentile(99.0)));
+            println!("    99.9%: {}ns", thousands(latency.consume.percentile(99.9)));
+            println!("  produce");
+            println!("    50.0%: {}ns", thousands(latency.produce.percentile(50.0)));
+            println!("    70.0%: {}ns", thousands(latency.produce.percentile(70.0)));
+            println!("    90.0%: {}ns", thousands(latency.produce.percentile(90.0)));
+            println!("    95.0%: {}ns", thousands(latency.produce.percentile(95.0)));
+            println!("    99.0%: {}ns", thousands(latency.produce.percentile(99.0)));
+            println!("    99.9%: {}ns", thousands(latency.produce.percentile(99.9)));
+        }
+    });
+}
+
 fn main() {
     let filter = env::args().nth(1).and_then(|f| if f == "--bench" { None } else { Some(f) });
-    run!(filter, "bounded_spsc", 25, bench_spsc!([bounded::spsc], 2 << 24));
-    run!(filter, "unbounded_spsc", 5, bench_spsc!([unbounded::spsc]));
-    run!(filter, "bounded_mpmc", 5, bench_spsc!([bounded::mpmc], 2 << 24));
-    run!(filter, "unbounded_mpmc", 3, bench_spsc!([unbounded::mpmc], 0));
+    run_throughput!(filter, "bounded_spsc", 25, bench_throughput_spsc!([bounded::spsc], 2 << 24));
+    run_throughput!(filter, "unbounded_spsc", 5, bench_throughput_spsc!([unbounded::spsc]));
+    run_throughput!(filter, "bounded_mpmc", 5, bench_throughput_spsc!([bounded::mpmc], 2 << 24));
+    run_throughput!(filter, "unbounded_mpmc", 3, bench_throughput_spsc!([unbounded::mpmc], 0));
+    run_latency!(filter, "bounded_spsc", bench_latency_spsc!([bounded::spsc], 2 << 24));
+    run_latency!(filter, "unbounded_spsc", bench_latency_spsc!([unbounded::spsc]));
+    run_latency!(filter, "bounded_mpmc", bench_latency_spsc!([bounded::mpmc], 2 << 24));
+    run_latency!(filter, "unbounded_mpmc", bench_latency_spsc!([unbounded::mpmc], 0));
 }
