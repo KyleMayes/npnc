@@ -10,7 +10,7 @@ license = "Apache-2.0"
 
 description = "Lock-free queues."
 
-documentation = "https://kylemayes.github.io/npnc/npnc"
+documentation = "https://docs.rs/npnc"
 repository = "https://github.com/KyleMayes/npnc"
 
 [features]
