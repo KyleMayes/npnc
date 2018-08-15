@@ -13,6 +13,8 @@ description = "Lock-free queues."
 documentation = "https://docs.rs/npnc"
 repository = "https://github.com/KyleMayes/npnc"
 
+keywords = ["queue", "spsc", "mpmc", "bounded", "unbounded"]
+
 [features]
 
 valgrind = []
