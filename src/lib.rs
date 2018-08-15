@@ -56,10 +56,6 @@
 
 #![warn(missing_copy_implementations, missing_debug_implementations, missing_docs)]
 
-#![cfg_attr(feature="clippy", feature(plugin))]
-#![cfg_attr(feature="clippy", plugin(clippy))]
-#![cfg_attr(feature="clippy", warn(clippy))]
-
 #[cfg(feature="valgrind")]
 extern crate alloc_system;
 
