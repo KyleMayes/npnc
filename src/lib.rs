@@ -13,6 +13,44 @@
 // limitations under the License.
 
 //! Lock-free queues.
+//!
+//! # Examples
+//!
+//! ## Bounded SPSC
+//!
+//! ```
+//! extern crate npnc;
+//!
+//! use std::thread;
+//!
+//! use npnc::bounded::spsc;
+//!
+//! fn main() {
+//!     let (producer, consumer) = spsc::channel(64);
+//!
+//!     // Producer
+//!     let b = thread::spawn(move || {
+//!         for index in 0..32 {
+//!             producer.produce(index).unwrap();
+//!         }
+//!     });
+//!
+//!     // Consumer
+//!     let a = thread::spawn(move || {
+//!         loop {
+//!             if let Ok(item) = consumer.consume() {
+//!                 println!("{}", item);
+//!                 if item == 31 {
+//!                     break;
+//!                 }
+//!             }
+//!         }
+//!     });
+//!
+//!     a.join().unwrap();
+//!     b.join().unwrap();
+//! }
+//! ```
 
 #![cfg_attr(feature="valgrind", feature(alloc_system))]
 
