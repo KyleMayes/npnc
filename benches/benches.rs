@@ -18,10 +18,9 @@ extern crate npnc;
 
 use std::env;
 
-use queuecheck::{Data};
-
 const WARMUP: usize = 1_000_000;
 const MEASUREMENT: usize = 100_000_000;
+const RANKS: &[f64] = &[50.0, 70.0, 90.0, 95.0, 99.0, 99.9, 99.99, 99.999, 99.9999, 99.99999];
 
 fn thousands(ops: f64) -> String {
     let mut string = format!("{:.2}", ops);
@@ -31,14 +30,6 @@ fn thousands(ops: f64) -> String {
         string.insert(index, '_');
     }
     string
-}
-
-fn print_latencies(name: &str, data: &Data) {
-    println!("  {}", name);
-    for p in [50.0, 70.0, 90.0, 95.0, 99.0, 99.9, 99.99, 99.999, 99.9999, 99.99999].iter() {
-        let name = format!("{}%:", p);
-        println!("    {:<10} {}ns", name, thousands(data.percentile(*p)));
-    }
 }
 
 macro_rules! bench_throughput {
@@ -64,10 +55,10 @@ macro_rules! run_throughput {
     ($filter:expr, $name:expr, $runs:expr, $bench:expr) => ({
         let name = format!("throughput_{}", $name);
         if $filter.as_ref().map_or(true, |f| name.contains(f)) {
-            println!("bench {} ...", name);
+            println!("{}", name);
             let mut runs = (0..$runs).map(|_| $bench).collect::<Vec<_>>();
             runs.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            println!("  {} operation/second", thousands(runs[$runs / 2]));
+            println!("  {} operation/second\n", thousands(runs[$runs / 2]));
         }
     });
 }
@@ -95,10 +86,8 @@ macro_rules! run_latency {
     ($filter:expr, $name:expr, $bench:expr) => ({
         let name = format!("latency_{}", $name);
         if $filter.as_ref().map_or(true, |f| name.contains(f)) {
-            println!("bench {} ...", name);
-            let latency = $bench;
-            print_latencies("consume", &latency.consume);
-            print_latencies("produce", &latency.produce);
+            $bench.report(&name, RANKS);
+            println!();
         }
     });
 }
