@@ -156,7 +156,7 @@ impl<T> Queue<T> {
         }
 
         // Return an error if the queue is full.
-        let write = self.write.load(Acquire);
+        let write = self.write.load(Relaxed);
         if write.wrapping_sub(self.read_copy.get()) == self.buffer.size() {
             self.read_copy.set(self.read.load(Acquire));
             if write.wrapping_sub(self.read_copy.get()) == self.buffer.size() {
@@ -172,7 +172,7 @@ impl<T> Queue<T> {
 
     fn consume(&self) -> Result<T, ConsumeError> {
         // Return an error if the queue is empty.
-        let read = self.read.load(Acquire);
+        let read = self.read.load(Relaxed);
         if read == self.write_copy.get() {
             self.write_copy.set(self.write.load(Acquire));
             if read == self.write_copy.get() {
